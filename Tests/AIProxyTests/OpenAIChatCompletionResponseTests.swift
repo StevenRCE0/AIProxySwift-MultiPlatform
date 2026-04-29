@@ -52,31 +52,7 @@ final class OpenAIChatCompletionResponseTests: XCTestCase {
         XCTAssertEqual(640, res.usage?.completionTokensDetails?.reasoningTokens)
     }
 
-    func testCreateImageResponseIsDecodable() throws {
-        let sampleResponse = """
-        {
-          "created": 1721071915,
-          "data": [
-            {
-              "revised_prompt": "An outdoor winter scene.",
-              "url": "https://api.example.com/image.png"
-            }
-          ]
-        }
-        """
-
-        let res = try OpenAICreateImageResponseBody.deserialize(from: sampleResponse)
-        XCTAssertEqual(
-            "An outdoor winter scene.",
-            res.data.first?.revisedPrompt
-        )
-        XCTAssertEqual(
-            URL(string: "https://api.example.com/image.png"),
-            res.data.first?.url
-        )
-    }
-
-    // This tests the response for function calling in this announcement:
+// This tests the response for function calling in this announcement:
     // https://openai.com/index/introducing-structured-outputs-in-the-api/
     func testResponseWithToolUseAndStructuredOutputsIsDecodable() throws {
         let sampleResponse = #"""

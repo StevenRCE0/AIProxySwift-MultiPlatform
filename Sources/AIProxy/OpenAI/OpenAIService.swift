@@ -232,35 +232,12 @@ import Foundation
         return try await self.serviceNetworker.makeRequestAndDeserializeResponse(request)
     }
 
-    /// Starts a realtime session.
-    ///
-    /// - Parameters:
-    ///   - model: The model to use. See the available model names in the `realtime` section here:
-    ///            https://developers.openai.com/api/docs/models
-    ///   - configuration: The session configuration object, see this reference:
-    ///                    https://platform.openai.com/docs/api-reference/realtime-client-events/session/update#realtime-client-events/session/update-session
-    ///   - logLevel: The threshold level that this library begins emitting log messages.
-    ///               For example, if you set this to `info`, then you'll see all `info`, `warning`, `error`, and `critical` logs.
-    ///
-    /// - Returns: A realtime session manager that the caller can send and receive messages with.
-    public func realtimeSession(
-        model: String,
-        configuration: OpenAIRealtimeSessionConfiguration,
-        logLevel: AIProxyLogLevel
-    ) async throws -> OpenAIRealtimeSession {
-        AIProxyLogLevel.callerDesiredLogLevel = logLevel
-        let request = try await self.requestBuilder.plainGET(
-            path: "/v1/realtime?model=\(model)",
-            secondsToWait: 60,
-            additionalHeaders: [:]
-        )
-        return OpenAIRealtimeSession(
-            webSocketTask: self.serviceNetworker.urlSession.webSocketTask(with: request),
-            sessionConfiguration: configuration
-        )
-    }
+    // Realtime sessions removed — depend on AVFoundation `AVAudioPCMBuffer`
+    // realtime processing, which the multiplatform subset doesn't ship. To
+    // bring it back, restore `OpenAIRealtime*.swift` and the
+    // `MicrophonePCMSampleVendor` family from upstream.
 
-    /// Uploads a file to OpenAI for use in a future tool call
+/// Uploads a file to OpenAI for use in a future tool call
     /// https://platform.openai.com/docs/api-reference/files/create
     ///
     /// - Parameters:
@@ -653,6 +630,26 @@ import Foundation
         case .noVersionPrefix:
             return "/\(common)"
         }
+    }
+}
+
+// MARK: - Realtime bridge
+extension OpenAIService {
+    /// Builds a `URLSessionWebSocketTask` for the given relative path on the configured base URL.
+    ///
+    /// This is the seam that the optional `AIProxyRealtime` target uses to attach the
+    /// `realtimeSession()` API. Keeping this as the only public touchpoint avoids
+    /// exposing the internal `requestBuilder` / `serviceNetworker` machinery.
+    public func webSocketTask(
+        path: String,
+        additionalHeaders: [String: String] = [:]
+    ) async throws -> URLSessionWebSocketTask {
+        let request = try await self.requestBuilder.plainGET(
+            path: path,
+            secondsToWait: 60,
+            additionalHeaders: additionalHeaders
+        )
+        return self.serviceNetworker.urlSession.webSocketTask(with: request)
     }
 }
 

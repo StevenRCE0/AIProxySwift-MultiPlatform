@@ -1,0 +1,20 @@
+//
+//  AudioPCMPlayerError.swift
+//  AIProxy
+//
+//  Created by Lou Zell on 2/20/25.
+//
+
+import Foundation
+import AIProxy
+
+nonisolated public enum AudioPCMPlayerError: LocalizedError, Sendable {
+    case couldNotConfigureAudioEngine(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .couldNotConfigureAudioEngine(let message):
+            return message
+        }
+    }
+}

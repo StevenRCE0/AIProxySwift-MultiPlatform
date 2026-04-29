@@ -9,14 +9,16 @@ import Foundation
 struct BackgroundNetworker {
 
     /// Throws AIProxyError.unsuccessfulRequest if the returned status code is non-200
+    ///
+    /// `progressCallback` is accepted for API compatibility but is currently a no-op
+    /// in this fork: the upstream implementation routed it through the proxy's
+    /// certificate-pinning delegate, which has been removed.
     @AIProxyActor static func makeRequestAndWaitForData(
         _ session: URLSession,
         _ request: URLRequest,
         _ progressCallback: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (Data, HTTPURLResponse) {
-        if let progressCallback {
-            (session.delegate as? AIProxyCertificatePinningDelegate)?.progressCallback = progressCallback
-        }
+        _ = progressCallback
         let (data, res) = try await session.data(
             for: request,
             delegate: session.delegate as? URLSessionTaskDelegate
@@ -68,10 +70,6 @@ struct BackgroundNetworker {
 
         let dataTaskBridge = URLSessionDataTaskBridge()
         let task = session.dataTask(with: request)
-
-        if let proxiedDelegate = session.delegate as? AIProxyCertificatePinningDelegate {
-            proxiedDelegate.addBridge(for: task, box: dataTaskBridge)
-        }
 
         if let directDelegate = session.delegate as? DirectURLSessionDataDelegate {
             directDelegate.addBridge(for: task, box: dataTaskBridge)

@@ -13,7 +13,9 @@ nonisolated public enum AIProxyLogLevel: Int, Sendable {
 
     /// This must only be accessed through `ProtectedPropertyQueue.callerDesiredLogLevel`.
     nonisolated(unsafe) static var _callerDesiredLogLevel = AIProxyLogLevel.warning
-    nonisolated static var callerDesiredLogLevel: AIProxyLogLevel {
+    /// Public so the optional `AIProxyRealtime` target (and other downstream
+    /// extension targets) can read/update the threshold.
+    nonisolated public static var callerDesiredLogLevel: AIProxyLogLevel {
         get {
             ProtectedPropertyQueue.callerDesiredLogLevel.sync { self._callerDesiredLogLevel }
         }
@@ -34,7 +36,9 @@ nonisolated internal let aiproxyLogger = Logger(
 //
 // H/T Quinn the Eskimo!
 // https://developer.apple.com/forums/thread/774931
+/// Public so downstream extension targets (e.g. `AIProxyRealtime`) can use
+/// the same gated-log helper that core uses internally.
 @inline(__always)
-nonisolated internal func logIf(_ logLevel: AIProxyLogLevel) -> Logger? {
+nonisolated public func logIf(_ logLevel: AIProxyLogLevel) -> Logger? {
     return logLevel.isAtOrAboveThresholdLevel(AIProxyLogLevel.callerDesiredLogLevel) ? aiproxyLogger : nil
 }
