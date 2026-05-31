@@ -100,19 +100,56 @@ extension OpenAIChatCompletionChunk.Choice {
         public let role: String?
 
         public let toolCalls: [ToolCall]?
-        
-        public init(content: String?, refusal: String?, role: String?, toolCalls: [ToolCall]?) {
+
+        /// Audio output delta. Present when the response includes audio (`modalities: ["audio"]`).
+        public let audio: AudioDelta?
+
+        public init(content: String?, refusal: String?, role: String?, toolCalls: [ToolCall]?, audio: AudioDelta? = nil) {
             self.content = content
             self.refusal = refusal
             self.role = role
             self.toolCalls = toolCalls
+            self.audio = audio
         }
 
         private enum CodingKeys: String, CodingKey {
+            case audio
             case content
             case refusal
             case role
             case toolCalls = "tool_calls"
+        }
+    }
+}
+
+// MARK: - AudioDelta
+extension OpenAIChatCompletionChunk.Choice.Delta {
+    /// Streamed audio data from an audio-capable model.
+    nonisolated public struct AudioDelta: Decodable, Sendable {
+        /// Unique identifier for this audio response. Use to reference in multi-turn via `AudioReference`.
+        public let id: String?
+
+        /// Base64-encoded audio data chunk (PCM16 or WAV depending on config).
+        public let data: String?
+
+        /// Incremental transcript of the audio being generated.
+        public let transcript: String?
+
+        /// Expiry timestamp for the audio ID (Unix seconds).
+        public let expiresAt: Int?
+
+        public init(id: String? = nil, data: String? = nil, transcript: String? = nil, expiresAt: Int? = nil) {
+            self.id = id
+            self.data = data
+            self.transcript = transcript
+            self.expiresAt = expiresAt
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case data
+            case transcript
+            case expiresAt = "expires_at"
         }
     }
 }

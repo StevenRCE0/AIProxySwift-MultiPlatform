@@ -60,23 +60,53 @@ extension OpenRouterChatCompletionChunk.Choice {
 
         public let toolCalls: [ToolCall]?
 
+        /// Audio output delta. Present when the response includes audio (`modalities: ["audio"]`).
+        public let audio: AudioDelta?
+
         public init(
             role: String,
             content: String? = nil,
             reasoning: String? = nil,
-            toolCalls: [OpenRouterChatCompletionChunk.Choice.Delta.ToolCall]? = nil
+            toolCalls: [OpenRouterChatCompletionChunk.Choice.Delta.ToolCall]? = nil,
+            audio: AudioDelta? = nil
         ) {
             self.role = role
             self.content = content
             self.reasoning = reasoning
             self.toolCalls = toolCalls
+            self.audio = audio
         }
 
         private enum CodingKeys: String, CodingKey {
+            case audio
             case role
             case content
             case reasoning
             case toolCalls = "tool_calls"
+        }
+    }
+}
+
+// MARK: - AudioDelta
+extension OpenRouterChatCompletionChunk.Choice.Delta {
+    nonisolated public struct AudioDelta: Codable, Sendable {
+        public let id: String?
+        public let data: String?
+        public let transcript: String?
+        public let expiresAt: Int?
+
+        public init(id: String? = nil, data: String? = nil, transcript: String? = nil, expiresAt: Int? = nil) {
+            self.id = id
+            self.data = data
+            self.transcript = transcript
+            self.expiresAt = expiresAt
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case data
+            case transcript
+            case expiresAt = "expires_at"
         }
     }
 }

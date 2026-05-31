@@ -87,14 +87,19 @@ extension OpenAIChatCompletionResponseBody.Choice {
         /// models). `nil` for providers that don't surface reasoning.
         public let reasoning: String?
 
-        public init(content: String?, role: String, toolCalls: [ToolCall]?, reasoning: String? = nil) {
+        /// Audio response data. Present when audio output was requested via `modalities: ["audio"]`.
+        public let audio: AudioResponse?
+
+        public init(content: String?, role: String, toolCalls: [ToolCall]?, reasoning: String? = nil, audio: AudioResponse? = nil) {
             self.content = content
             self.role = role
             self.toolCalls = toolCalls
             self.reasoning = reasoning
+            self.audio = audio
         }
 
         private enum CodingKeys: String, CodingKey {
+            case audio
             case content
             case role
             case toolCalls = "tool_calls"
@@ -110,6 +115,7 @@ extension OpenAIChatCompletionResponseBody.Choice {
             let primaryReasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
             let fallbackReasoning = try container.decodeIfPresent(String.self, forKey: .reasoningContent)
             self.reasoning = primaryReasoning ?? fallbackReasoning
+            self.audio = try container.decodeIfPresent(AudioResponse.self, forKey: .audio)
         }
     }
 }
@@ -180,6 +186,38 @@ extension OpenAIChatCompletionResponseBody.Choice.Message.ToolCall {
                 self.argumentsRaw = nil
                 self.arguments = nil
             }
+        }
+    }
+}
+
+// MARK: - AudioResponse
+extension OpenAIChatCompletionResponseBody.Choice.Message {
+    /// Audio output from an audio-capable model (non-streaming response).
+    nonisolated public struct AudioResponse: Decodable, Sendable {
+        /// Unique identifier for this audio. Use to reference in multi-turn conversations.
+        public let id: String?
+
+        /// Base64-encoded audio data.
+        public let data: String?
+
+        /// Transcript of the generated audio.
+        public let transcript: String?
+
+        /// Expiry timestamp for the audio ID (Unix seconds).
+        public let expiresAt: Int?
+
+        public init(id: String? = nil, data: String? = nil, transcript: String? = nil, expiresAt: Int? = nil) {
+            self.id = id
+            self.data = data
+            self.transcript = transcript
+            self.expiresAt = expiresAt
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id
+            case data
+            case transcript
+            case expiresAt = "expires_at"
         }
     }
 }
