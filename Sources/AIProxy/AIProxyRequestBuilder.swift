@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor internal protocol AIProxyRequestBuilder: Sendable {
 

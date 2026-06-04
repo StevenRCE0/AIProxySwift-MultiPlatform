@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 nonisolated private let kTimeoutBufferForSyncAPIInSeconds: UInt = 5
 

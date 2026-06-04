@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor final class GroqDirectService: GroqService, DirectService, Sendable {
     private let unprotectedAPIKey: String

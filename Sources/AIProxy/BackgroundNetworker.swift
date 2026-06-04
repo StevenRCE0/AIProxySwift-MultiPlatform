@@ -5,6 +5,28 @@
 //  Created by Lou Zell on 8/24/24.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+#if canImport(FoundationNetworking)
+/// Linux stand-in for `URLSession.AsyncBytes`. swift-corelibs-foundation has no
+/// async `URLSession.bytes`, so streaming responses are delivered through the
+/// delegate-based chunk stream (see `makeRequestAndVendChunksWithResponse`) and
+/// split into lines here. Exposes `.lines` (yielding `String`) so the streaming
+/// call sites are identical to the Apple `URLSession.AsyncBytes.lines` path.
+struct AIProxyAsyncLines: AsyncSequence, Sendable {
+    typealias Element = String
+    let stream: AsyncThrowingStream<String, Error>
+    func makeAsyncIterator() -> AsyncThrowingStream<String, Error>.Iterator {
+        stream.makeAsyncIterator()
+    }
+    var lines: AIProxyAsyncLines { self }
+}
+typealias AIProxyResponseBytes = AIProxyAsyncLines
+#else
+typealias AIProxyResponseBytes = URLSession.AsyncBytes
+#endif
 
 struct BackgroundNetworker {
 
@@ -40,7 +62,33 @@ struct BackgroundNetworker {
     @AIProxyActor static func makeRequestAndWaitForAsyncBytes(
         _ session: URLSession,
         _ request: URLRequest
-    ) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+    ) async throws -> (AIProxyResponseBytes, HTTPURLResponse) {
+#if canImport(FoundationNetworking)
+        // Linux: no async URLSession.bytes. Reuse the delegate-based chunk stream
+        // (which already throws unsuccessfulRequest on a non-2xx status) and split
+        // the Data chunks into lines, matching URLSession.AsyncBytes.lines.
+        let (dataStream, httpResponse) = try await makeRequestAndVendChunksWithResponse(session, request)
+        let lineStream = AsyncThrowingStream<String, Error> { continuation in
+            let task = Task {
+                var buffer = Data()
+                for await chunk in dataStream {
+                    buffer.append(chunk)
+                    while let nl = buffer.firstIndex(of: 0x0A) {
+                        var lineData = Data(buffer[buffer.startIndex..<nl])
+                        if lineData.last == 0x0D { lineData.removeLast() }  // strip CR (CRLF)
+                        continuation.yield(String(decoding: lineData, as: UTF8.self))
+                        buffer.removeSubrange(buffer.startIndex...nl)
+                    }
+                }
+                if !buffer.isEmpty {
+                    continuation.yield(String(decoding: buffer, as: UTF8.self))
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+        return (AIProxyAsyncLines(stream: lineStream), httpResponse)
+#else
         let (asyncBytes, res) = try await session.bytes(
             for: request,
             delegate: session.delegate as? URLSessionTaskDelegate
@@ -61,6 +109,7 @@ struct BackgroundNetworker {
             )
         }
         return (asyncBytes, httpResponse)
+#endif
     }
 
     @AIProxyActor static func makeRequestAndVendChunks(

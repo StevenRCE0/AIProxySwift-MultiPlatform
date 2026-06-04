@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 nonisolated final class DirectURLSessionDataDelegate: NSObject, URLSessionTaskDelegate, URLSessionDataDelegate {
     /// Why is this needed?

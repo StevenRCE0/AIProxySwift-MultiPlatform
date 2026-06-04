@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A bridge between `URLSession` delegate-style updates and the async/await interface of `BackgroundNetworker`.
 /// Used by internal conformers of URLSessionDataTaskDelegate

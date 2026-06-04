@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor enum AIProxyURLRequest {
 
@@ -40,7 +43,11 @@ import Foundation
         }
 
         var request = URLRequest(url: url)
+        #if canImport(Darwin)
+        // .avStreaming is an Apple-only NetworkServiceType (a QoS hint); it's
+        // absent in swift-corelibs-foundation on Linux.
         request.networkServiceType = .avStreaming
+        #endif
         request.httpMethod = verb.toString(hasBody: body != nil)
         request.httpBody = body
 

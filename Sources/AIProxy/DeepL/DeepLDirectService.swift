@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor final class DeepLDirectService: DeepLService, DirectService, Sendable {
     private let unprotectedAPIKey: String

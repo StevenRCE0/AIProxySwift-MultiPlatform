@@ -1,4 +1,27 @@
+#if canImport(OSLog)
 import OSLog
+#else
+import Foundation
+
+/// Non-Apple fallback for Apple's OSLog `Logger`, so AIProxy builds on
+/// Linux/Windows. Errors/criticals go to stderr; lower levels are no-ops.
+/// (No `privacy:` interpolation is used at AIProxy call sites, so plain-String
+/// methods are sufficient.)
+public struct Logger: Sendable {
+    public init(subsystem: String, category: String) {}
+    public func debug(_ message: String) {}
+    public func info(_ message: String) {}
+    public func notice(_ message: String) {}
+    public func warning(_ message: String) {}
+    public func error(_ message: String) {
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+    }
+    public func critical(_ message: String) {
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+    }
+    public func log(_ message: String) {}
+}
+#endif
 
 nonisolated public enum AIProxyLogLevel: Int, Sendable {
     case debug

@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor public class OpenAIService: Sendable {
     private let requestFormat: OpenAIRequestFormat

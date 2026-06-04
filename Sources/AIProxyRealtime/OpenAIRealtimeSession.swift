@@ -7,6 +7,9 @@
 
 import AVFoundation
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import AIProxy
 
 nonisolated private let kWebsocketDisconnectedErrorCode = 57

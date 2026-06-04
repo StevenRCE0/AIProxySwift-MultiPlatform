@@ -10,6 +10,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
 import AppKit

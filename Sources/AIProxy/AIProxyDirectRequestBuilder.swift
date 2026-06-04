@@ -6,6 +6,9 @@
 //
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @AIProxyActor struct AIProxyDirectRequestBuilder: AIProxyRequestBuilder {
     let baseURL: String
