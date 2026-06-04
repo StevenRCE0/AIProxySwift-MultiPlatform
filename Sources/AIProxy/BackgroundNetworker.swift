@@ -5,16 +5,18 @@
 //  Created by Lou Zell on 8/24/24.
 
 import Foundation
+import AsyncHTTPClient
+import NIOCore
+import NIOHTTP1
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
 
-#if canImport(FoundationNetworking)
-/// Linux stand-in for `URLSession.AsyncBytes`. swift-corelibs-foundation has no
-/// async `URLSession.bytes`, so streaming responses are delivered through the
-/// delegate-based chunk stream (see `makeRequestAndVendChunksWithResponse`) and
-/// split into lines here. Exposes `.lines` (yielding `String`) so the streaming
-/// call sites are identical to the Apple `URLSession.AsyncBytes.lines` path.
+/// A stream of response lines (yields `String`). Streaming responses go through
+/// the NIO HTTP stack (AsyncHTTPClient) on every platform — Linux's
+/// FoundationNetworking has no async `URLSession.bytes` — so there's a single,
+/// non-diverging code path. `.lines` mirrors `URLSession.AsyncBytes.lines`, so
+/// streaming call sites are platform-agnostic.
 struct AIProxyAsyncLines: AsyncSequence, Sendable {
     typealias Element = String
     let stream: AsyncThrowingStream<String, Error>
@@ -24,9 +26,6 @@ struct AIProxyAsyncLines: AsyncSequence, Sendable {
     var lines: AIProxyAsyncLines { self }
 }
 typealias AIProxyResponseBytes = AIProxyAsyncLines
-#else
-typealias AIProxyResponseBytes = URLSession.AsyncBytes
-#endif
 
 struct BackgroundNetworker {
 
@@ -59,57 +58,83 @@ struct BackgroundNetworker {
     }
 
     /// Throws AIProxyError.unsuccessfulRequest if the returned status code is non-200
+    ///
+    /// Streaming runs on the NIO HTTP stack (`HTTPClient.shared`, no lifecycle to
+    /// manage) on every platform, so there's no per-platform divergence. The
+    /// `session` is unused here — the request carries all headers/auth/body — and
+    /// is kept only for call-site compatibility with the non-streaming helpers.
     @AIProxyActor static func makeRequestAndWaitForAsyncBytes(
         _ session: URLSession,
         _ request: URLRequest
     ) async throws -> (AIProxyResponseBytes, HTTPURLResponse) {
-#if canImport(FoundationNetworking)
-        // Linux: no async URLSession.bytes. Reuse the delegate-based chunk stream
-        // (which already throws unsuccessfulRequest on a non-2xx status) and split
-        // the Data chunks into lines, matching URLSession.AsyncBytes.lines.
-        let (dataStream, httpResponse) = try await makeRequestAndVendChunksWithResponse(session, request)
+        _ = session
+        guard let url = request.url else {
+            throw AIProxyError.assertion("Request has no URL")
+        }
+
+        var hreq = HTTPClientRequest(url: url.absoluteString)
+        switch (request.httpMethod ?? "GET").uppercased() {
+        case "GET": hreq.method = .GET
+        case "POST": hreq.method = .POST
+        case "PUT": hreq.method = .PUT
+        case "DELETE": hreq.method = .DELETE
+        case "PATCH": hreq.method = .PATCH
+        case let other: hreq.method = .RAW(value: other)
+        }
+        for (name, value) in request.allHTTPHeaderFields ?? [:] {
+            hreq.headers.add(name: name, value: value)
+        }
+        if let body = request.httpBody {
+            hreq.body = .bytes(ByteBuffer(bytes: body))
+        }
+        let seconds = request.timeoutInterval > 0 ? Int64(request.timeoutInterval) : 60
+        let response = try await HTTPClient.shared.execute(hreq, timeout: .seconds(seconds))
+
+        // Rebuild an HTTPURLResponse so callers can read response metadata as before.
+        var headerFields: [String: String] = [:]
+        for field in response.headers { headerFields[field.name] = field.value }
+        let httpResponse = HTTPURLResponse(
+            url: url,
+            statusCode: Int(response.status.code),
+            httpVersion: "HTTP/1.1",
+            headerFields: headerFields
+        ) ?? HTTPURLResponse()
+
+        if response.status.code > 299 {
+            var responseBody = ""
+            for try await chunk in response.body {
+                responseBody += String(decoding: chunk.readableBytesView, as: UTF8.self)
+            }
+            throw AIProxyError.unsuccessfulRequest(
+                statusCode: Int(response.status.code),
+                responseBody: responseBody
+            )
+        }
+
         let lineStream = AsyncThrowingStream<String, Error> { continuation in
             let task = Task {
-                var buffer = Data()
-                for await chunk in dataStream {
-                    buffer.append(chunk)
-                    while let nl = buffer.firstIndex(of: 0x0A) {
-                        var lineData = Data(buffer[buffer.startIndex..<nl])
-                        if lineData.last == 0x0D { lineData.removeLast() }  // strip CR (CRLF)
-                        continuation.yield(String(decoding: lineData, as: UTF8.self))
-                        buffer.removeSubrange(buffer.startIndex...nl)
+                do {
+                    var buffer = Data()
+                    for try await chunk in response.body {
+                        buffer.append(contentsOf: chunk.readableBytesView)
+                        while let nl = buffer.firstIndex(of: 0x0A) {
+                            var lineData = Data(buffer[buffer.startIndex..<nl])
+                            if lineData.last == 0x0D { lineData.removeLast() }  // strip CR (CRLF)
+                            continuation.yield(String(decoding: lineData, as: UTF8.self))
+                            buffer.removeSubrange(buffer.startIndex...nl)
+                        }
                     }
+                    if !buffer.isEmpty {
+                        continuation.yield(String(decoding: buffer, as: UTF8.self))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
                 }
-                if !buffer.isEmpty {
-                    continuation.yield(String(decoding: buffer, as: UTF8.self))
-                }
-                continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
         return (AIProxyAsyncLines(stream: lineStream), httpResponse)
-#else
-        let (asyncBytes, res) = try await session.bytes(
-            for: request,
-            delegate: session.delegate as? URLSessionTaskDelegate
-        )
-
-        guard let httpResponse = res as? HTTPURLResponse else {
-            throw AIProxyError.assertion("Network response is not an http response")
-        }
-
-        if (httpResponse.statusCode > 299) {
-            var responseBody = ""
-            for try await line in asyncBytes.lines {
-                responseBody += line
-            }
-            throw AIProxyError.unsuccessfulRequest(
-                statusCode: httpResponse.statusCode,
-                responseBody: responseBody
-            )
-        }
-        return (asyncBytes, httpResponse)
-#endif
     }
 
     @AIProxyActor static func makeRequestAndVendChunks(

@@ -20,9 +20,20 @@ let package = Package(
             name: "AIProxyRealtime",
             targets: ["AIProxyRealtime"]),
     ],
+    dependencies: [
+        // SSE streaming uses the NIO HTTP stack (AsyncHTTPClient) uniformly across
+        // platforms — Linux's FoundationNetworking has no async URLSession.bytes.
+        .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+    ],
     targets: [
         .target(
             name: "AIProxy",
+            dependencies: [
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+            ],
             resources: [
                 .process("Resources/PrivacyInfo.xcprivacy")
             ],
