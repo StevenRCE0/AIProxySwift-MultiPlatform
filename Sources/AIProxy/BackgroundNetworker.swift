@@ -93,12 +93,16 @@ struct BackgroundNetworker {
         // Rebuild an HTTPURLResponse so callers can read response metadata as before.
         var headerFields: [String: String] = [:]
         for field in response.headers { headerFields[field.name] = field.value }
-        let httpResponse = HTTPURLResponse(
+        // Note: HTTPURLResponse() (no-arg) exists on Apple but not on Linux
+        // (swift-corelibs-foundation), so handle the failable init explicitly.
+        guard let httpResponse = HTTPURLResponse(
             url: url,
             statusCode: Int(response.status.code),
             httpVersion: "HTTP/1.1",
             headerFields: headerFields
-        ) ?? HTTPURLResponse()
+        ) else {
+            throw AIProxyError.assertion("Could not construct HTTPURLResponse")
+        }
 
         if response.status.code > 299 {
             var responseBody = ""
