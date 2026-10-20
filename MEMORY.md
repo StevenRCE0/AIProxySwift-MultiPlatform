@@ -45,6 +45,15 @@ Corollaries:
   *whether* it's included or *where* it lives — stop and reconsider: that's behavioral divergence
   every future merge will pay for.
 
+## Our one behavioural addition — keep it through merges
+
+`OpenAIChatCompletionRequestBody.Message.cacheBreakpoint(_:cacheControl:)` (plus `CacheControl`):
+a message whose content goes out as parts with Anthropic-style `cache_control` on the last one.
+OpenRouter forwards it to Anthropic and Gemini models; upstream has no prompt-cache control on the
+OpenAI chat types, and KeepTalking's connector needs it to set breakpoints without building its own
+requests. It is additive (a new case, no existing shape changed). If upstream ever adds its own
+cache control here, take upstream's and move KeepTalking onto it.
+
 ## Mechanics
 
 Merge on a throwaway branch so the real branch stays clean until verified; trust git's rename

@@ -175,10 +175,22 @@ public enum AIProxy {
         return PerplexityDirectService(unprotectedAPIKey: unprotectedAPIKey)
     }
 
+    /// Service that makes request directly to Mistral. No protections are built-in for this service.
+    /// Please only use this for BYOK use cases.
+    ///
+    /// - Parameters:
+    ///   - unprotectedAPIKey: Your Mistral API key
+    ///   - baseURL: An optional base URL to use for requests. If not provided, the default Mistral API
+    ///     base URL is used (`https://api.mistral.ai`).
+    /// - Returns: An instance of MistralService configured and ready to make requests
     nonisolated public static func mistralDirectService(
-        unprotectedAPIKey: String
+        unprotectedAPIKey: String,
+        baseURL: String? = nil
     ) -> MistralService {
-        return MistralDirectService(unprotectedAPIKey: unprotectedAPIKey)
+        return MistralDirectService(
+            unprotectedAPIKey: unprotectedAPIKey,
+            baseURL: baseURL
+        )
     }
 
     nonisolated public static func eachAIDirectService(

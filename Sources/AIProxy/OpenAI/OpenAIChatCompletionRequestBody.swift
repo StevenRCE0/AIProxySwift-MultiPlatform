@@ -326,6 +326,11 @@ extension OpenAIChatCompletionRequestBody {
             name: String? = nil
         )
 
+        /// `message` as a prompt-cache breakpoint: its content goes out as a list of parts with
+        /// `cache_control` on the last one. OpenRouter forwards it to Anthropic and Gemini models;
+        /// OpenAI caches prefixes on its own and has no use for it.
+        indirect case cacheBreakpoint(Message, cacheControl: CacheControl)
+
         var role: String {
             switch self {
             case .assistant: return "assistant"
@@ -333,6 +338,7 @@ extension OpenAIChatCompletionRequestBody {
             case .system: return "system"
             case .tool: return "tool"
             case .user: return "user"
+            case .cacheBreakpoint(let message, _): return message.role
             }
         }
         private enum RootKey: String, CodingKey {
@@ -367,7 +373,85 @@ extension OpenAIChatCompletionRequestBody {
             case .user(let content, let name):
                 try container.encode(content, forKey: .content)
                 try container.encodeIfPresent(name, forKey: .name)
+            case .cacheBreakpoint(let message, let cacheControl):
+                try message.encodeAsBreakpoint(cacheControl, into: &container)
             }
+        }
+
+        /// The message's own fields, with its content as parts and `cache_control` on the last.
+        private func encodeAsBreakpoint(
+            _ cacheControl: CacheControl,
+            into container: inout KeyedEncodingContainer<RootKey>
+        ) throws {
+            func texts(_ content: MessageContent<String, [String]>) -> [ContentPart] {
+                switch content {
+                case .text(let text): return [.text(text)]
+                case .parts(let texts): return texts.map { .text($0) }
+                }
+            }
+            func encodeParts(_ parts: [ContentPart]) throws {
+                let controlled = parts.enumerated().map { index, part in
+                    CacheControlledPart(part: part, cacheControl: index == parts.count - 1 ? cacheControl : nil)
+                }
+                try container.encode(controlled, forKey: .content)
+            }
+            switch self {
+            case .assistant(let content, let name, let refusal, let toolCalls, let audio):
+                if let content { try encodeParts(texts(content)) }
+                try container.encodeIfPresent(name, forKey: .name)
+                try container.encodeIfPresent(refusal, forKey: .refusal)
+                try container.encodeIfPresent(toolCalls, forKey: .toolCalls)
+                try container.encodeIfPresent(audio, forKey: .audio)
+            case .developer(let content, let name), .system(let content, let name):
+                try encodeParts(texts(content))
+                try container.encodeIfPresent(name, forKey: .name)
+            case .tool(let content, let toolCallID):
+                try encodeParts(texts(content))
+                try container.encode(toolCallID, forKey: .toolCallID)
+            case .user(let content, let name):
+                switch content {
+                case .text(let text): try encodeParts([.text(text)])
+                case .parts(let parts): try encodeParts(parts)
+                }
+                try container.encodeIfPresent(name, forKey: .name)
+            case .cacheBreakpoint(let message, _):
+                // A breakpoint on a breakpoint: the outer control stands.
+                try message.encodeAsBreakpoint(cacheControl, into: &container)
+            }
+        }
+    }
+}
+
+// MARK: - Cache control
+extension OpenAIChatCompletionRequestBody.Message {
+    /// Anthropic-style `cache_control`, which OpenRouter reads on content parts.
+    nonisolated public struct CacheControl: Encodable, Sendable, Equatable {
+        public let type: String
+        /// `"5m"` or `"1h"` where the model honours it (Anthropic); nil for the provider's default.
+        public let ttl: String?
+
+        public init(ttl: String? = nil) {
+            self.type = "ephemeral"
+            self.ttl = ttl
+        }
+
+        public static let ephemeral = CacheControl()
+    }
+
+    /// A content part with an optional `cache_control` beside its own fields.
+    private struct CacheControlledPart: Encodable {
+        let part: ContentPart
+        let cacheControl: CacheControl?
+
+        private enum Key: String, CodingKey {
+            case cacheControl = "cache_control"
+        }
+
+        func encode(to encoder: any Encoder) throws {
+            try part.encode(to: encoder)
+            guard let cacheControl else { return }
+            var container = encoder.container(keyedBy: Key.self)
+            try container.encode(cacheControl, forKey: .cacheControl)
         }
     }
 }
